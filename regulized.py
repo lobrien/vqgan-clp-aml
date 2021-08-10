@@ -1,77 +1,17 @@
-#!/usr/bin/env python
-# coding: utf-8
-
 # # Generates images from text prompts with VQGAN and CLIP (Mse regulized zquantize method).
 # 
-# By jbustter https://twitter.com/jbusted1 .
+# lobrien@knowing,bet
+# Based on notebook by jbustter https://twitter.com/jbusted1 .
 # Based on a notebook by Katherine Crowson (https://github.com/crowsonkb, https://twitter.com/RiversHaveWings)
-# 
-# 
-# *Modified by: Justin John*
-# 
 
-# In[ ]:
+import subprocess
 
+r = subprocess.run(['nvidia-smi', '-L'], capture_output=True)
+print(r)
 
-#@markdown #**Check GPU type**
-#@markdown ### Factory reset runtime if you don't have the desired GPU.
-
-#@markdown ---
-
-
-
-
-#@markdown V100 = Excellent (*Available only for Colab Pro Users*)
-
-#@markdown P100 = Very Good
-
-#@markdown T4 = Good
-
-#@markdown K80 = Meh
-
-#@markdown P4 = Aight
-
-#@markdown ---
-
-get_ipython().system('nvidia-smi -L')
-
-#@markdown #**Anti-Disconnect for Google Colab**
-#@markdown ## Run this to stop it from disconnecting automatically 
-#@markdown  **(It will anyhow disconnect after 6 - 12 hrs for using the free version of Colab.)**
-#@markdown  *(Colab Pro users will get about 24 hrs usage time)*
-#@markdown ---
-
-import IPython
-js_code = '''
-function ClickConnect(){
-console.log("Working");
-document.querySelector("colab-toolbar-button#connect").click()
-}
-setInterval(ClickConnect,60000)
-'''
-display(IPython.display.Javascript(js_code))#@markdown #**Installation of libraries**
-# @markdown This cell will take a little while because it has to download several libraries
-
-#@markdown ---
-
-!git clone https://github.com/openai/CLIP
-!git clone https://github.com/CompVis/taming-transformers
-!pip install ftfy regex tqdm omegaconf pytorch-lightning
-!pip install kornia
-!pip install einops
-# In[ ]:
-
-
-#@markdown #**Selection of models to download**
-#@markdown ---
-#@markdown OpenImages and  ImageNet models
-
-#@markdown ---
-
+# Download transfer-learning weights
 imagenet_16384 = False #@param {type:"boolean"}
-
 openimages_8192 = False #@param {type:"boolean"}
-
 
 if imagenet_16384:
   get_ipython().system("curl -L -o vqgan_imagenet_f16_16384.yaml -C - 'https://heibox.uni-heidelberg.de/d/a7530b09fed84f80a887/files/?p=%2Fconfigs%2Fmodel.yaml&dl=1' #ImageNet 16384")
@@ -80,11 +20,7 @@ if openimages_8192:
   get_ipython().system("curl -L -o vqgan_openimages_f16_8192.ckpt -C - 'https://dl.nmkd.de/ai/clip/vqgan/8k-2021-06/vqgan-f8-8192.ckpt' #ImageNet 16384")
   get_ipython().system("curl -L -o vqgan_openimages_f16_8192.yaml -C - 'https://dl.nmkd.de/ai/clip/vqgan/8k-2021-06/vqgan-f8-8192.yaml' #ImageNet 16384")
 
-
-# In[ ]:
-
-
-#@markdown #**Loading libraries and definitions**
+# loading libraries and definitions
 
 import argparse
 import math
@@ -118,16 +54,13 @@ def noise_gen(shape):
         noise += torch.randn([n, c, h_cur, w_cur]) / 5
     return noise
 
-
 def sinc(x):
     return torch.where(x != 0, torch.sin(math.pi * x) / (math.pi * x), x.new_ones([]))
-
 
 def lanczos(x, a):
     cond = torch.logical_and(-a < x, x < a)
     out = torch.where(cond, sinc(x) * sinc(x/a), x.new_zeros([]))
     return out / out.sum()
-
 
 def ramp(ratio, width):
     n = math.ceil(width / ratio + 1)
@@ -137,7 +70,6 @@ def ramp(ratio, width):
         out[i] = cur
         cur += ratio
     return torch.cat([-out[1:].flip([0]), out])[1:-1]
-
 
 def resample(input, size, align_corners=True):
     n, c, h, w = input.shape
@@ -160,11 +92,6 @@ def resample(input, size, align_corners=True):
     input = input.view([n, c, h, w])
     return F.interpolate(input, size, mode='bicubic', align_corners=align_corners)
     
-
-# def replace_grad(fake, real):
-#     return fake.detach() - real.detach() + real
-
-
 class ReplaceGrad(torch.autograd.Function):
     @staticmethod
     def forward(ctx, x_forward, x_backward):
@@ -174,7 +101,6 @@ class ReplaceGrad(torch.autograd.Function):
     @staticmethod
     def backward(ctx, grad_in):
         return None, grad_in.sum_to_size(ctx.shape)
-
 
 class ClampWithGrad(torch.autograd.Function):
     @staticmethod
@@ -192,14 +118,12 @@ class ClampWithGrad(torch.autograd.Function):
 replace_grad = ReplaceGrad.apply
 
 clamp_with_grad = ClampWithGrad.apply
-# clamp_with_grad = torch.clamp
 
 def vector_quantize(x, codebook):
     d = x.pow(2).sum(dim=-1, keepdim=True) + codebook.pow(2).sum(dim=1) - 2 * x @ codebook.T
     indices = d.argmin(-1)
     x_q = F.one_hot(indices, codebook.shape[0]).to(d.dtype) @ codebook
     return replace_grad(x_q, x)
-
 
 class Prompt(nn.Module):
     def __init__(self, embed, weight=1., stop=float('-inf')):
@@ -216,7 +140,6 @@ class Prompt(nn.Module):
         dists = input_normed.sub(embed_normed).norm(dim=2).div(2).arcsin().pow(2).mul(2)
         dists = dists * self.weight.sign()
         return self.weight.abs() * replace_grad(dists, torch.maximum(dists, self.stop)).mean()
-
 
 def parse_prompt(prompt):
     vals = prompt.rsplit(':', 2)
@@ -265,20 +188,10 @@ class MakeCutouts(nn.Module):
           offsety = torch.randint(0, sideY - size + 1, ())
           cutout = input[:, :, offsety:offsety + size, offsetx:offsetx + size]
           cutouts.append(resample(cutout, (self.cut_size, self.cut_size)))
-
         
-        cutouts = torch.cat(cutouts, dim=0)
-
-        # if args.use_augs:
-        #   cutouts = augs(cutouts)
-
-        # if args.noise_fac:
-        #   facs = cutouts.new_empty([cutouts.shape[0], 1, 1, 1]).uniform_(0, args.noise_fac)
-        #   cutouts = cutouts + facs * torch.randn_like(cutouts)
-        
+        cutouts = torch.cat(cutouts, dim=0)        
 
         return clamp_with_grad(cutouts, 0, 1)
-
 
 def load_vqgan_model(config_path, checkpoint_path):
     config = OmegaConf.load(config_path)
@@ -365,24 +278,9 @@ class EMATensor(nn.Module):
             return self.tensor
         return self.average
 
-get_ipython().run_line_magic('mkdir', './content/vids')
-
-
-# ## **Arguments**         
-
-# In[ ]:
-
+# **Arguments**         
 
 rng = np.random.default_rng()
-
-
-# In[ ]:
-
-
-#@markdown #**Double-click here and input**
-#@markdown like prompts, iterations and other stuff  
-#@markdown *(This is a W.I.P  space and will be simplified further soon)*
-#@markdown ---
 
 ps = [
     "A formal portrait of a blond man in a white suit raising a martini glass while standing on a green lawn in front of a mansion on a harbor on a Summer day",
@@ -393,7 +291,6 @@ ps = [
     "A formal portrait of an intelligent brunette woman her hair in a bun standing in front of a chalkboard covered in quantum mechanics equations",
     "A black and white ink drawing of a monstrous crab approaching a mansion on a cliff overlooking a stormy ocean"
 ]
-
 
 args = argparse.Namespace(
     
@@ -425,8 +322,7 @@ args = argparse.Namespace(
     # noise and other constraints
     use_noise = None,
     constraint_regions = False,#
-    
-    
+        
     # add noise to embedding
     noise_prompt_weights = None,
     noise_prompt_seeds = [14575],#
@@ -438,7 +334,7 @@ args = argparse.Namespace(
     mse_quantize = False,
 
     # end itteration
-    max_itter =1001,
+    max_itter = 1001,
 )
 
 mse_decay = 0
@@ -446,6 +342,7 @@ if args.init_weight:
   mse_decay = args.init_weight / args.mse_epoches
 
 # <AUGMENTATIONS>
+
 augs = nn.Sequential(
     
     K.RandomHorizontalFlip(p=0.5),
@@ -460,13 +357,7 @@ image = TF.to_pil_image(noise.div(5).add(0.5).clamp(0, 1)[0])
 image.save('init3.png')
 
 
-# # **Constraints**
-
-# In[ ]:
-
-
-#@markdown #*Double-click here and edit me if you like*
-#@markdown ---
+# **Constraints**
 
 from PIL import Image, ImageDraw
 
@@ -510,21 +401,9 @@ if args.constraint_regions and args.init_image:
   z_mask = torch.zeros([1, 256, int(height/8), int(width/8)]).to(device)
   z_mask[:,:,c_h[0]:c_h[1],c_w[0]:c_w[1]] = 1
 
+# **Final Steps**
 
-# #**Final Steps**
-
-# In[ ]:
-
-
-get_ipython().run_line_magic('cd', '/mnt/d/src/lobrien/VQGAN+CLIP')
-
-
-# In[ ]:
-
-
-#@markdown #**Fire up the AI**
-
-#@markdown ---
+# **Fire up the AI**
 
 device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
 
@@ -538,7 +417,6 @@ perceptor = clip.load(args.clip_model, jit=False)[0].eval().requires_grad_(False
 mse_weight = args.init_weight
 
 cut_size = perceptor.visual.input_resolution
-# e_dim = model.quantize.e_dim
 
 if args.vqgan_checkpoint == 'vqgan_openimages_f16_8192.ckpt':
     e_dim = 256
@@ -550,7 +428,6 @@ else:
     n_toks = model.quantize.n_e
     z_min = model.quantize.embedding.weight.min(dim=0).values[None, :, None, None]
     z_max = model.quantize.embedding.weight.max(dim=0).values[None, :, None, None]
-
 
 make_cutouts = MakeCutouts(cut_size, args.cutn, cut_pow=args.cut_pow)
 
@@ -567,9 +444,7 @@ if args.init_image:
     if args.use_noise:
       pil_image = pil_image + args.use_noise * torch.randn_like(pil_image) 
     z_t, *_ = model.encode(pil_image.to(device).unsqueeze(0) * 2 - 1)
-
 else:
-    
     one_hot = F.one_hot(torch.randint(n_toks, [toksY * toksX], device=device), n_toks).float()
 
     if args.vqgan_checkpoint == 'vqgan_openimages_f16_8192.ckpt':
@@ -579,21 +454,12 @@ else:
     z_t = z_t.view([-1, toksY, toksX, e_dim]).permute(0, 3, 1, 2)
 type(z_t)
 
-
-# In[ ]:
-
-
 z = EMATensor(z_t, args.ema_val)
-
-
-# In[ ]:
-
 
 if args.mse_withzeros and not args.init_image:
   z_orig = torch.zeros_like(z.tensor)
 else:
   z_orig = z.tensor.clone()
-
 
 opt = optim.Adam(z.parameters(), lr=args.step_size, weight_decay=0.00000000)
 
@@ -612,8 +478,6 @@ for prompt in args.prompts:
     txt, weight, stop = parse_prompt(prompt)
     embed = perceptor.encode_text(clip.tokenize(txt).to(device)).float()
     pMs.append(Prompt(embed, weight, stop).to(device))
-    # pMs[0].embed = pMs[0].embed + Prompt(embed, weight, stop).embed.to(device)
-
 
 def synth(z, quantize=True):
     if args.constraint_regions:
@@ -636,9 +500,8 @@ def checkin(i, losses):
     tqdm.write(f'i: {i}, loss: {sum(losses).item():g}')#', losses: {losses_str}')
     out = synth(z.average, True)
 
-    TF.to_pil_image(out[0].cpu()).save('progress.png')   
-    display.display(display.Image('progress.png')) 
-
+    #TF.to_pil_image(out[0].cpu()).save('progress.png')   
+    #display.display(display.Image('progress.png')) 
 
 def ascend_txt():
     global mse_weight
@@ -725,33 +588,4 @@ try:
 
 except KeyboardInterrupt:
     pass
-
-
-# # **Generate video**
-
-# In[ ]:
-
-
-#@markdown #*Double-click here and edit me*
-
-# %cd ./content/vids
-
-# images = "%d.png"
-# video = "../content/old_man_iceberg.mp4"
-# !ffmpeg -r 30 -i $images -crf 20 -s 640x512 -pix_fmt yuv420p $video
-
-# %cd ..
-
-
-# **Delete all frames from folder**
-
-# In[ ]:
-
-
-#@markdown Run this tab if you wanna clear all the genarated frames images
-
-
-# %cd vids
-# %rm *.png
-# %cd ..
 
