@@ -1,2 +1,8 @@
+<<<<<<< HEAD
 content/
 .ipynb_checkpoints/
+*/__pycache__/
+=======
+content/
+.ipynb_checkpoints/
+>>>>>>> parent of aa609de... basic command line
