@@ -49,9 +49,8 @@ def downloads_for_imagenet_16384() :
    
 
 def downloads_for_openimages_8192() :
-    download_if_missing('vqgan-f8-81982.ckpt', 'https://dl.nmkd.de/ai/clip/vqgan/8k-2021-06/vqgan-f8-8192.ckpt')
-    download_if_missing('vqgan_f8_8192.yaml', 'https://dl.nmkd.de/ai/clip/vqgan/8k-2021-06/vqgan_f8_8192.yaml')
-
+    download_if_missing('vqgan_f8_8192.ckpt', 'https://dl.nmkd.de/ai/clip/vqgan/8k-2021-06/vqgan-f8-8192.ckpt')
+    download_if_missing('vqgan_f8_8192.yaml', 'https://dl.nmkd.de/ai/clip/vqgan/8k-2021-06/vqgan-f8-8192.yaml')
 
 def noise_gen(shape):
     n, c, h, w = shape
@@ -302,6 +301,9 @@ if __name__ == "__main__":
     if openimages_8192:
         downloads_for_openimages_8192()
 
+    Path('content/vids').mkdir(parents=True, exist_ok=True)
+    
+
 
     sys.path.append('./taming-transformers')
             
@@ -327,8 +329,8 @@ if __name__ == "__main__":
 
         # clip model settings
         clip_model='ViT-B/32',
-        vqgan_config='vqgan_openimages_f16_8192.yaml',         
-        vqgan_checkpoint='vqgan_openimages_f16_8192.ckpt',
+        vqgan_config='vqgan_f8_8192.yaml',         
+        vqgan_checkpoint='vqgan_f8_8192.ckpt',
         step_size=0.1,
         
         # cutouts / crops
@@ -360,7 +362,7 @@ if __name__ == "__main__":
         mse_quantize = False,
 
         # end itteration
-        max_itter = 1001,
+        max_itter = 100,
     )
 
     mse_decay = 0
@@ -444,7 +446,7 @@ if __name__ == "__main__":
 
     cut_size = perceptor.visual.input_resolution
 
-    if args.vqgan_checkpoint == 'vqgan_openimages_f16_8192.ckpt':
+    if args.vqgan_checkpoint == 'vqgan_f8_8192.ckpt':
         e_dim = 256
         n_toks = model.quantize.n_embed
         z_min = model.quantize.embed.weight.min(dim=0).values[None, :, None, None]
@@ -473,7 +475,7 @@ if __name__ == "__main__":
     else:
         one_hot = F.one_hot(torch.randint(n_toks, [toksY * toksX], device=device), n_toks).float()
 
-        if args.vqgan_checkpoint == 'vqgan_openimages_f16_8192.ckpt':
+        if args.vqgan_checkpoint == 'vqgan_f8_8192.ckpt':
             z_t = one_hot @ model.quantize.embed.weight
         else:
             z_t = one_hot @ model.quantize.embedding.weight
@@ -510,7 +512,7 @@ if __name__ == "__main__":
             z = replace_grad(z, z * z_mask)
 
         if quantize:
-            if args.vqgan_checkpoint == 'vqgan_openimages_f16_8192.ckpt':
+            if args.vqgan_checkpoint == 'vqgan_f8_8192.ckpt':
               z_q = vector_quantize(z.movedim(1, 3), model.quantize.embed.weight).movedim(3, 1)
             else:
                 z_q = vector_quantize(z.movedim(1, 3), model.quantize.embedding.weight).movedim(3, 1)
@@ -570,10 +572,10 @@ if __name__ == "__main__":
 
                 if mse_weight - mse_decay > 0 and mse_weight - mse_decay >= mse_decay:
                     mse_weight = mse_weight - mse_decay
-                    print(f"updated mse weight: {mse_weight}")
+                    #print(f"updated mse weight: {mse_weight}")
                 else:
                     mse_weight = 0
-                    print(f"updated mse weight: {mse_weight}")
+                    #print(f"updated mse weight: {mse_weight}")
 
         for prompt in pMs:
             result.append(prompt(iii))

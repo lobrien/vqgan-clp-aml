@@ -1,3 +1,13 @@
 content/
 .ipynb_checkpoints/
-*/__pycache__/
+
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Weights
+vqgan_f8_8192.ckpt
+vqgan_f8_8192.yaml
+model.yaml
+last.ckpt
