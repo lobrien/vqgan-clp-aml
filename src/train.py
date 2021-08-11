@@ -6,19 +6,38 @@
 
 import subprocess
 
-r = subprocess.run(['nvidia-smi', '-L'], capture_output=True)
-print(r)
+
+
+print(show_gpu())
+
+def download_if_missing(filename, url):
+    # Download a file from the given url if not found locally
+    if not os.path.exists(filename):
+        command = ['curl', url, '-o', filename]
+        print('Downloading', filename)
+        subprocess.check_call(command)
+        print('Finished downloading', filename)
+
+
+def downloads_for_imagenet_16384() :
+    download_if_missing('model.yaml', 'https://heibox.uni-heidelberg.de/d/a7530b09fed84f80a887/files/?p=%2Fconfigs%2Fmodel.yaml&dl=1')
+    download_if_missing('last.ckpt', 'https://heibox.uni-heidelberg.de/d/a7530b09fed84f80a887/files/?p=%2Fcheckpoints%2Flast.ckpt&dl=1')
+   
+
+def downloads_for_openimages_8192() :
+    download_if_missing('vqgan-f8-81982.ckpt', 'https://dl.nmkd.de/ai/clip/vqgan/8k-2021-06/vqgan-f8-8192.ckpt')
+    download_if_missing('vqgan_f8_8192.yaml', 'https://dl.nmkd.de/ai/clip/vqgan/8k-2021-06/vqgan_f8_8192.yaml')
+
 
 # Download transfer-learning weights
 imagenet_16384 = False #@param {type:"boolean"}
-openimages_8192 = False #@param {type:"boolean"}
+openimages_8192 = True #@param {type:"boolean"}
 
 if imagenet_16384:
-  get_ipython().system("curl -L -o vqgan_imagenet_f16_16384.yaml -C - 'https://heibox.uni-heidelberg.de/d/a7530b09fed84f80a887/files/?p=%2Fconfigs%2Fmodel.yaml&dl=1' #ImageNet 16384")
-  get_ipython().system("curl -L -o vqgan_imagenet_f16_16384.ckpt -C - 'https://heibox.uni-heidelberg.de/d/a7530b09fed84f80a887/files/?p=%2Fckpts%2Flast.ckpt&dl=1' #ImageNet 16384")
+    downloads_for_imagenet_16384()
+
 if openimages_8192:
-  get_ipython().system("curl -L -o vqgan_openimages_f16_8192.ckpt -C - 'https://dl.nmkd.de/ai/clip/vqgan/8k-2021-06/vqgan-f8-8192.ckpt' #ImageNet 16384")
-  get_ipython().system("curl -L -o vqgan_openimages_f16_8192.yaml -C - 'https://dl.nmkd.de/ai/clip/vqgan/8k-2021-06/vqgan-f8-8192.yaml' #ImageNet 16384")
+    downloads_for_openimages_8192()
 
 # loading libraries and definitions
 
@@ -29,7 +48,7 @@ import sys
 
 sys.path.append('./taming-transformers')
 
-from IPython import display
+
 from omegaconf import OmegaConf
 from PIL import Image
 from taming.models import cond_transformer, vqgan
@@ -44,6 +63,9 @@ import numpy as np
 from CLIP import clip
 
 import kornia.augmentation as K
+
+def show_gpu():
+    return subprocess.run(['nvidia-smi', '-L'], capture_output=True)
 
 def noise_gen(shape):
     n, c, h, w = shape
