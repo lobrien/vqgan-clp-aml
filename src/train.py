@@ -362,7 +362,7 @@ if __name__ == "__main__":
         mse_quantize = False,
 
         # end itteration
-        max_itter = 100,
+        max_itter = 1000,
     )
 
     mse_decay = 0
