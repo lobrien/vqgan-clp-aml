@@ -30,10 +30,11 @@ RUN conda create -p $AZUREML_CONDA_ENVIRONMENT_PATH \
     dbus=1.13.18=hb2f20db_0 \
     decorator=5.0.9=pyhd3eb1b0_0 \
     defusedxml=0.7.1=pyhd3eb1b0_0 \
+    detectron2=0.5.0 \
     entrypoints=0.3=py37_0 \
     expat=2.4.1=h2531618_2 \
-    fastcore=1.3.20=py_0 \
-    fastprogress=1.0.0=pyh39e3cac_0 \
+    fastcore=1.3\
+    fastprogress=1.0.0 \
     fontconfig=2.13.1=h6c09931_0 \
     freetype=2.10.4=h5ab3b9f_0 \
     glib=2.68.2=h36276a3_0 \
@@ -167,7 +168,7 @@ RUN conda create -p $AZUREML_CONDA_ENVIRONMENT_PATH \
     zlib=1.2.11=h7b6447c_3 \
     zstd=1.4.9=haebb681_0 \
 
-    -c anaconda -c pytorch -c conda-forge
+    -c anaconda -c pytorch -c conda-forge -c fastai
 
 # Prepend path to AzureML conda environment
 ENV PATH $AZUREML_CONDA_ENVIRONMENT_PATH/bin:$PATH
@@ -186,7 +187,6 @@ RUN HOROVOD_WITH_PYTORCH=1 \
 	'click==8.0.1' \
 	'cloudpickle==1.6.0' \
 	'cython==0.29.24' \
-	'detectron2==0.5' \
 	'einops==0.3.0' \
 	'fsspec==2021.7.0' \
 	'ftfy==6.0.3' \
