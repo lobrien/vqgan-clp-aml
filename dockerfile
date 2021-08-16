@@ -182,6 +182,7 @@ RUN HOROVOD_WITH_PYTORCH=1 \
 	'antlr4-python3-runtime==4.8' \
 	'appdirs==1.4.4' \
 	'async-timeout==3.0.1' \
+    'azureml-mlflow>=1.33' \
 	'black==21.4b2' \
 	'cachetools==4.2.2' \
 	'click==8.0.1' \

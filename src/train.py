@@ -25,6 +25,8 @@ from torchvision import transforms
 from torchvision.transforms import functional as TF
 from tqdm.notebook import tqdm
 import numpy as np
+import mlflow
+from azureml.core import Workspace, Run
 
 from CLIP import clip
 
@@ -322,7 +324,7 @@ if __name__ == "__main__":
 
     args = argparse.Namespace(
         
-        prompts=[ps[6]],
+        prompts=[ps[2]],
         size=[320, 256], 
         init_image= None, #'./seeds/fisherman.png',
         init_weight= 0.5,
@@ -527,6 +529,8 @@ if __name__ == "__main__":
         tqdm.write(f'i: {i}, loss: {sum(losses).item():g}')#', losses: {losses_str}')
         out = synth(z.average, True)
 
+        mlflow.log_metric('loss', sum(losses).item(), i)
+
         #TF.to_pil_image(out[0].cpu()).save('progress.png')   
         #display.display(display.Image('progress.png')) 
 
@@ -599,20 +603,28 @@ if __name__ == "__main__":
         opt.step()
         z.update()
 
-    i = 0
-    try:
-        with tqdm() as pbar:
-            while True and i != args.max_itter:
 
-                train(i)
+    # Azure tracking
 
-                if i > 0 and i%args.mse_decay_rate==0 and i <= args.mse_decay_rate * args.mse_epoches:
-                    z = EMATensor(z.average, args.ema_val)
-                    opt = optim.Adam(z.parameters(), lr=args.step_size, weight_decay=0.00000000)
+    run_context = Run.get_context()
+    ws = run_context.experiment.workspace
+    mlflow.set_tracking_uri(ws.get_mlflow_tracking_uri())
+    mlflow.set_experiment('simple')
+    with mlflow.start_run():
+        i = 0
+        try:
+            with tqdm() as pbar:
+                while True and i != args.max_itter:
 
-                i += 1
-                pbar.update()
+                    train(i)
 
-    except KeyboardInterrupt:
-        pass
+                    if i > 0 and i%args.mse_decay_rate==0 and i <= args.mse_decay_rate * args.mse_epoches:
+                        z = EMATensor(z.average, args.ema_val)
+                        opt = optim.Adam(z.parameters(), lr=args.step_size, weight_decay=0.00000000)
 
+                    i += 1
+                    pbar.update()
+
+        except KeyboardInterrupt:
+            pass
+    print("Finished calculations")
